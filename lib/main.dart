@@ -1,15 +1,16 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:test/adminlogin.dart';
 import 'package:test/collegereg.dart';
 import 'dart:async';
 import 'collegelogin.dart';
 import 'register.dart';
 import 'login.dart';
-//import 'package:firebase_core/firebase_core.dart';
-//import 'firebase_options.dart';
 
 void main() async {
-  // WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp();
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(MyApp());
 }
 
@@ -17,7 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'College Safety App',
+      title: 'Student Sanctuary App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -32,16 +33,30 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _totalcases = 100;
+  int _totalCases = 0;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
-    Timer.periodic(Duration(minutes: 5), (timer) {
-      setState(() {
-        _totalcases += 1;
-      });
+    _updateCaseCount();
+
+    // Listen for changes in the problem_report collection
+    _firestore.collection('problem_reports').snapshots().listen((snapshot) {
+      _updateCaseCount();
     });
+  }
+
+  Future<void> _updateCaseCount() async {
+    try {
+      QuerySnapshot snapshot =
+          await _firestore.collection('problem_reports').get();
+      setState(() {
+        _totalCases = snapshot.docs.length;
+      });
+    } catch (e) {
+      print('Error fetching case count: $e');
+    }
   }
 
   @override
@@ -50,8 +65,7 @@ class _HomePageState extends State<HomePage> {
       body: Container(
         decoration: BoxDecoration(
           image: DecorationImage(
-            image: AssetImage(
-                'assets/background.jpg'), // Replace with your background image
+            image: AssetImage('assets/background.jpg'),
             fit: BoxFit.cover,
           ),
         ),
@@ -61,7 +75,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               //  SizedBox(height: 10),
               Image.asset(
-                'assets/logo.png', // Replace 'assets/logo.png' with your logo path
+                'assets/logo.png',
                 width: 300,
                 height: 250,
               ),
@@ -133,7 +147,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                             SizedBox(height: 16.0),
                             Text(
-                              '₹$_totalcases+',
+                              '$_totalCases+',
                               style: TextStyle(
                                 fontSize: 28.0,
                                 fontWeight: FontWeight.bold,
@@ -211,9 +225,13 @@ class _HomePageState extends State<HomePage> {
               SizedBox(height: 30),
               ElevatedButton(
                 onPressed: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => AdminLoginPage()));
                   // Navigate to police login page
                 },
-                child: Text('Police Login'),
+                child: Text('Admin Login'),
               ),
             ],
           ),

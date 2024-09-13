@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'profile.dart';
 import 'report.dart';
 import 'navigation.dart';
@@ -46,23 +47,54 @@ class _ComplaintDashboardState extends State<ComplaintDashboard> {
   int _selectedIndex = 1;
 
   // Define the problems list
-  final List<Problem> problems = [
-    Problem(
-      title: 'Network Connectivity Issue',
-      description: 'Unable to connect to the internet in the computer lab.',
-      studentName: 'John Doe',
-    ),
-    Problem(
-      title: 'Broken Chair in Classroom',
-      description: 'One of the chairs in classroom 3B is broken.',
-      studentName: 'Jane Smith',
-    ),
-    Problem(
-      title: 'Malfunctioning Projector',
-      description: 'The projector in the auditorium is not working properly.',
-      studentName: 'Alice Johnson',
-    ),
-  ];
+  final List<Problem> problems = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetch initial data from Firestore
+    fetchProblems();
+  }
+
+  Future<void> fetchProblems() async {
+    try {
+      final QuerySnapshot querySnapshot =
+          await FirebaseFirestore.instance.collection('problem_reports').get();
+
+      // Fetch user data for each problem report
+      final List<Problem> fetchedProblems = [];
+
+      for (var doc in querySnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final userId = data['user_id'];
+
+        if (userId != null) {
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .get();
+
+          final userData = userDoc.data() as Map<String, dynamic>?;
+
+          if (userData != null) {
+            final problem = Problem(
+              title: data['nature_of_incident'] ?? '',
+              description: data['description'] ?? '',
+              studentName:
+                  '${userData['first_name'] ?? ''} ${userData['last_name'] ?? ''}',
+            );
+            fetchedProblems.add(problem);
+          }
+        }
+      }
+
+      setState(() {
+        problems.addAll(fetchedProblems);
+      });
+    } catch (e) {
+      print('Error fetching problems: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

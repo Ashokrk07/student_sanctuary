@@ -1,6 +1,9 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'collegecases.dart';
 import 'collegetotal.dart';
+import 'problemreport.dart';
 
 void main() {
   runApp(MyApp());
@@ -10,7 +13,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'College Safety App',
+      title: 'Student Sanctuary',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -19,12 +22,71 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class CollegeHome extends StatelessWidget {
+class CollegeHome extends StatefulWidget {
+  @override
+  _CollegeHomeState createState() => _CollegeHomeState();
+}
+
+class _CollegeHomeState extends State<CollegeHome> {
+  int totalCases = 0;
+  int collegeCases = 0;
+  String collegeName = 'Loading...';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCollegeName();
+  }
+
+  Future<void> _fetchCollegeName() async {
+    try {
+      // Ensure the user is logged in
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        DocumentSnapshot snapshot = await FirebaseFirestore.instance
+            .collection('college')
+            .doc(user.uid) // Use the actual user UID
+            .get();
+        setState(() {
+          collegeName = snapshot['college_name'] ?? 'Unknown College';
+        });
+        _fetchCaseCounts();
+      } else {
+        setState(() {
+          collegeName = 'User not logged in';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        collegeName = 'Error fetching college name';
+      });
+    }
+  }
+
+  Future<void> _fetchCaseCounts() async {
+    try {
+      // Fetch total number of cases
+      QuerySnapshot totalCasesSnapshot =
+          await FirebaseFirestore.instance.collection('problem_reports').get();
+      setState(() {
+        totalCases = totalCasesSnapshot.docs.length;
+      });
+
+      // Fetch number of cases for the specific college
+      QuerySnapshot collegeCasesSnapshot = await FirebaseFirestore.instance
+          .collection('problem_reports')
+          .where('college', isEqualTo: collegeName.toLowerCase())
+          .get();
+      setState(() {
+        collegeCases = collegeCasesSnapshot.docs.length;
+      });
+    } catch (e) {
+      print('Error fetching case counts: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    int totalCases = 200;
-    int collegeCases = 50;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -49,7 +111,7 @@ class CollegeHome extends StatelessWidget {
                 ),
                 SizedBox(width: 10),
                 Text(
-                  'Acharya Institute of Technology',
+                  collegeName,
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -155,26 +217,56 @@ class CollegeHome extends StatelessWidget {
             ),
             SizedBox(height: 20),
             Center(
-              child: ElevatedButton(
-                onPressed: () {
-                  // Add logout functionality here
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color.fromARGB(255, 28, 23, 47),
-                  //onPrimary: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20.0),
+              child: Column(
+                children: [
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProblemReport(),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color.fromARGB(255, 28, 23, 47),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20.0),
+                      ),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                    ),
+                    child: Text(
+                      'Report Status',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                ),
-                child: Text(
-                  'Logout',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
+                  SizedBox(height: 20), // Add space between buttons
+                  ElevatedButton(
+                    onPressed: () {
+                      // Add logout functionality here
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color.fromARGB(255, 28, 23, 47),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20.0),
+                      ),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                    ),
+                    child: Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ],

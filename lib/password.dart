@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-void main() => runApp(MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(MyApp());
+}
 
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: ChangePasswordScreen(),
-      // theme: ThemeData(
-      //   primarySwatch: Colors.blue,
-      //),
     );
   }
 }
@@ -55,22 +58,50 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         _isLoading = true;
       });
 
-      // Mock password change process
-      await Future.delayed(Duration(seconds: 2)); // Simulate a network call
+      try {
+        User? user = FirebaseAuth.instance.currentUser;
+        AuthCredential credential = EmailAuthProvider.credential(
+          email: user!.email!,
+          password: _oldPasswordController.text,
+        );
 
-      setState(() {
-        _isLoading = false;
-      });
+        // Reauthenticate user with old password
+        await user.reauthenticateWithCredential(credential);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Password changed successfully')),
-      );
+        // Update the password
+        await user.updatePassword(_newPasswordController.text);
 
-      // Clear the input fields and reset criteria
-      _oldPasswordController.clear();
-      _newPasswordController.clear();
-      _confirmPasswordController.clear();
-      _resetCriteria();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Password changed successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Clear the input fields and reset criteria
+        _oldPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
+        _resetCriteria();
+      } on FirebaseAuthException catch (e) {
+        String message;
+        if (e.code == 'wrong-password') {
+          message = 'The old password is incorrect.';
+        } else {
+          message = 'An error occurred: ${e.message}';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

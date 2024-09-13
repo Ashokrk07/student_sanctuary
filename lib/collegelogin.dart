@@ -1,12 +1,74 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'collegehome.dart';
 import 'collegereg.dart';
 import 'forgotpassword.dart';
 
-class CollegeLogin extends StatelessWidget {
+class CollegeLogin extends StatefulWidget {
+  @override
+  _CollegeLogin createState() => _CollegeLogin();
+}
+
+class _CollegeLogin extends State<CollegeLogin> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loginUser(BuildContext context) async {
+    if (_formKey.currentState!.validate()) {
+      try {
+        //UserCredential userCredential =
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Login successful!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => CollegeHome()),
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found') {
+          _errorMessage = 'No user found for that email.';
+        } else if (e.code == 'wrong-password') {
+          _errorMessage = 'Wrong password provided.';
+        } else {
+          _errorMessage = 'An error occurred: ${e.message}';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage!),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } catch (e) {
+        _errorMessage = 'An error occurred: $e';
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage!),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +147,6 @@ class CollegeLogin extends StatelessWidget {
                     SizedBox(height: 20.0),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        //primary: Colors.white, // Button background color
                         backgroundColor: Colors.white, // Button text color
                         padding: EdgeInsets.symmetric(vertical: 15.0),
                         shape: RoundedRectangleBorder(
@@ -93,14 +154,7 @@ class CollegeLogin extends StatelessWidget {
                         ),
                       ),
                       onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => CollegeHome()),
-                          ); // Navigate to home if fields are valid
-                          // Add your login logic here
-                        }
+                        _loginUser(context);
                       },
                       child: Text(
                         'Login',

@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -26,6 +27,7 @@ class _RatingPageState extends State<RatingPage> {
   double _rating = -1;
   String? _issueType;
   TextEditingController _descriptionController = TextEditingController();
+  bool _isLoading = false;
 
   Widget buildStarRating() {
     return Row(
@@ -48,6 +50,49 @@ class _RatingPageState extends State<RatingPage> {
         );
       }),
     );
+  }
+
+  Future<void> _submitFeedback() async {
+    if (_rating < 3 &&
+        _rating >= 0 &&
+        (_issueType == null || _descriptionController.text.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Please provide the issue type and description')),
+      );
+    } else {
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        await FirebaseFirestore.instance.collection('feedback').add({
+          'rating': _rating + 1,
+          'issueType': _issueType,
+          'description': _descriptionController.text,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Thank you for your feedback!')),
+        );
+
+        // Clear the input fields
+        setState(() {
+          _rating = -1;
+          _issueType = null;
+          _descriptionController.clear();
+        });
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit feedback: $e')),
+        );
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -111,30 +156,17 @@ class _RatingPageState extends State<RatingPage> {
                 ),
               ],
               SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  // Handle the submission of the rating and feedback
-                  if (_rating < 3 &&
-                      _rating >= 0 &&
-                      (_issueType == null ||
-                          _descriptionController.text.isEmpty)) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                          content: Text(
-                              'Please provide the issue type and description')),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Thank you for your feedback!')),
-                    );
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      Color.fromARGB(255, 28, 23, 47), // Custom button color
-                ),
-                child: Text('Submit', style: TextStyle(color: Colors.white)),
-              ),
+              _isLoading
+                  ? CircularProgressIndicator()
+                  : ElevatedButton(
+                      onPressed: _submitFeedback,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Color.fromARGB(
+                            255, 28, 23, 47), // Custom button color
+                      ),
+                      child:
+                          Text('Submit', style: TextStyle(color: Colors.white)),
+                    ),
             ],
           ),
         ),

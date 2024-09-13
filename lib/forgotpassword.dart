@@ -1,8 +1,83 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 
-class ForgotPasswordPage extends StatelessWidget {
+class ForgotPasswordPage extends StatefulWidget {
+  @override
+  _ForgotPasswordPageState createState() => _ForgotPasswordPageState();
+}
+
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
+  bool _isSendingLink = false;
+  bool _linkSent = false;
+
+  Future<void> _sendResetLink() async {
+    setState(() {
+      _isSendingLink = true;
+      _linkSent = false;
+    });
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: _emailController.text.trim(),
+      );
+
+      setState(() {
+        _isSendingLink = false;
+        _linkSent = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Reset link sent to ${_emailController.text.trim()}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Clear the email input field
+      _emailController.clear();
+
+      // Delay for 5 seconds
+      await Future.delayed(Duration(seconds: 5));
+
+      // Navigate back to the login page
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _isSendingLink = false;
+      });
+
+      String errorMessage;
+      switch (e.code) {
+        case 'invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        default:
+          errorMessage = 'An error occurred. Please try again.';
+          break;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $errorMessage'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _isSendingLink = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('An unexpected error occurred. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,39 +148,61 @@ class ForgotPasswordPage extends StatelessWidget {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your email';
                         }
-                        // Add more sophisticated email validation if needed
                         return null;
                       },
                     ),
                     SizedBox(height: 20.0),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            Colors.white, // Button background color
-                        padding: EdgeInsets.symmetric(vertical: 15.0),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20.0),
-                        ),
-                      ),
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          // Add logic to send reset password link
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  'Reset link sent to ${_emailController.text}'),
+                    _isSendingLink
+                        ? Center(
+                            child: SpinKitCircle(
+                              color: Colors.green,
+                              size: 50.0,
                             ),
-                          );
-                        }
-                      },
-                      child: Text(
-                        'Send Reset Link',
-                        style: TextStyle(
-                          color: Color.fromARGB(
-                              255, 28, 23, 47), // Button text color
+                          )
+                        : ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  Colors.white, // Button background color
+                              padding: EdgeInsets.symmetric(vertical: 15.0),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20.0),
+                              ),
+                            ),
+                            onPressed: () {
+                              if (_formKey.currentState != null &&
+                                  _formKey.currentState!.validate()) {
+                                _sendResetLink();
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Please enter a valid email address'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                            child: Text(
+                              'Send Reset Link',
+                              style: TextStyle(
+                                color: Color.fromARGB(
+                                    255, 28, 23, 47), // Button text color
+                              ),
+                            ),
+                          ),
+                    if (_linkSent)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20.0),
+                        child: Text(
+                          'A reset link has been sent to your email. Please check your inbox and follow the instructions to reset your password.',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),

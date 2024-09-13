@@ -5,6 +5,7 @@ import 'complaint.dart';
 import 'profile.dart';
 import 'report.dart';
 import 'navigation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() => runApp(HomePageMainApp());
 
@@ -30,8 +31,8 @@ class HomePageMain extends StatefulWidget {
 }
 
 class _HomePageMainState extends State<HomePageMain> {
-  int totalCases = 50; // Sample data
-  int solvedCases = 30; // Sample data
+  int totalCases = 0; // Sample data
+  int solvedCases = 0; // Sample data
   int _selectedIndex = 0;
 
   final List<String> videoUrls1 = ['assets/video.mp4'];
@@ -51,6 +52,7 @@ class _HomePageMainState extends State<HomePageMain> {
     _controllers1 = initializeVideoControllers(videoUrls1);
     _controllers2 = initializeVideoControllers(videoUrls2);
     _controllers3 = initializeVideoControllers(videoUrls3);
+    _fetchCaseCounts();
   }
 
   List<VideoPlayerController> initializeVideoControllers(
@@ -65,6 +67,19 @@ class _HomePageMainState extends State<HomePageMain> {
       });
       return controller;
     }).toList();
+  }
+
+  Future<void> _fetchCaseCounts() async {
+    try {
+      // Fetch total number of cases
+      QuerySnapshot totalCasesSnapshot =
+          await FirebaseFirestore.instance.collection('problem_reports').get();
+      setState(() {
+        totalCases = totalCasesSnapshot.docs.length;
+      });
+    } catch (e) {
+      print('Error fetching case counts: $e');
+    }
   }
 
   @override
@@ -202,7 +217,7 @@ class _HomePageMainState extends State<HomePageMain> {
                         child: Column(
                           children: [
                             Text(
-                              'Total Cases Solved',
+                              'Cases Solved',
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,

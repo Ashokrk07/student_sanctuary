@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "612236525731",
-    "project_id": "test-eb65b",
-    "storage_bucket": "test-eb65b.appspot.com"
+    "project_number": "949533101051",
+    "project_id": "student-34114",
+    "storage_bucket": "student-34114.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:612236525731:android:9e3ac96a09b8c44f6dbf16",
+        "mobilesdk_app_id": "1:949533101051:android:2c2e351dbbfa27d3a7195e",
         "android_client_info": {
           "package_name": "com.example.test"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAE-lxhrEC8OJabRbwwR9n_xaDmxk494Ts"
+          "current_key": "AIzaSyDH-iJaC3m0h74kGZq67ZywxFGnpjUQ5L4"
         }
       ],
       "services": {

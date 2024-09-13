@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'collegelogin.dart';
 
 class CollegeRegister extends StatefulWidget {
@@ -17,6 +19,82 @@ class _CollegeRegisterState extends State<CollegeRegister> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
+
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _collegeNameController.dispose();
+    _collegeEmailController.dispose();
+    _collegeStateController.dispose();
+    _collegePhoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _registerUser() async {
+    if (_formKey.currentState!.validate()) {
+      try {
+        UserCredential userCredential =
+            await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: _collegeEmailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+
+        await FirebaseFirestore.instance
+            .collection('college')
+            .doc(userCredential.user!.uid)
+            .set({
+          'college_name': _collegeNameController.text.trim(),
+          'college_email': _collegeEmailController.text.trim(),
+          'college_state': _collegeStateController.text.trim(),
+          'college_phone': _collegePhoneController.text.trim(),
+          'college_id': userCredential.user!.uid,
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Registration successful!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => CollegeLogin()),
+        );
+      } on FirebaseAuthException catch (e) {
+        setState(() {
+          if (e.code == 'email-already-in-use') {
+            _errorMessage = 'The account already exists for that email.';
+          } else if (e.code == 'weak-password') {
+            _errorMessage = 'The password provided is too weak.';
+          } else {
+            _errorMessage = 'An error occurred: ${e.message}';
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage!),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } catch (e) {
+        setState(() {
+          _errorMessage = 'An error occurred: $e';
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage!),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +203,12 @@ class _CollegeRegisterState extends State<CollegeRegister> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your college phone number';
                       }
-                      // Add your phone number validation logic here
+                      if (value.length != 10) {
+                        return 'Phone number must be exactly 10 digits';
+                      }
+                      if (!RegExp(r'^[9876]').hasMatch(value)) {
+                        return 'Phone number must start with 9, 8, 7, or 6';
+                      }
                       return null;
                     },
                   ),
@@ -181,24 +264,16 @@ class _CollegeRegisterState extends State<CollegeRegister> {
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
-
-                      //onPrimary: Colors.white, // Button text color
                       padding: EdgeInsets.symmetric(vertical: 15.0),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20.0),
                       ),
                     ),
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        // All fields are valid, proceed with registration
-                        // Add your registration logic here
-                      }
-                    },
+                    onPressed: _registerUser,
                     child: Text(
                       'Register',
                       style: TextStyle(
-                        color: Color.fromARGB(
-                            255, 28, 23, 47), // Button text color
+                        color: Color.fromARGB(255, 28, 23, 47),
                       ),
                     ),
                   ),
@@ -233,10 +308,4 @@ class _CollegeRegisterState extends State<CollegeRegister> {
       ),
     );
   }
-}
-
-void main() {
-  runApp(MaterialApp(
-    home: CollegeRegister(),
-  ));
 }

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login.dart';
+import 'package:flutter/services.dart';
 
 class RegistrationPage extends StatefulWidget {
   @override
@@ -19,6 +22,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   String? _gender;
+  String? _errorMessage;
+  String? _successMessage;
 
   @override
   void dispose() {
@@ -36,12 +41,94 @@ class _RegistrationPageState extends State<RegistrationPage> {
   }
 
   Future<void> _registerUser() async {
+    setState(() {
+      _errorMessage = null;
+      _successMessage = null;
+    });
+
     if (_formKey.currentState!.validate()) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => LoginPage()),
-      );
+      try {
+        UserCredential userCredential =
+            await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: emailcontroller.text.trim(),
+          password: passwordcontroller.text.trim(),
+        );
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set({
+          'first_name': firstnamecontroller.text.trim(),
+          'last_name': lastnamecontroller.text.trim(),
+          'email': emailcontroller.text.trim(),
+          'college_name': collegenamecontroller.text.trim(),
+          'state': statecontroller.text.trim(),
+          'phone_number': numbercontroller.text.trim(),
+          'gender': _gender,
+          'user_id': userCredential.user!.uid, // Store the user ID
+        });
+
+        setState(() {
+          _successMessage = 'Registration successful!';
+          _clearForm();
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_successMessage!),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => LoginPage()),
+        );
+      } on FirebaseAuthException catch (e) {
+        setState(() {
+          if (e.code == 'email-already-in-use') {
+            _errorMessage = 'The account already exists for that email.';
+          } else if (e.code == 'weak-password') {
+            _errorMessage = 'The password provided is too weak.';
+          } else {
+            _errorMessage = 'An error occurred: ${e.message}';
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage!),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } catch (e) {
+        setState(() {
+          _errorMessage = 'An error occurred: $e';
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage!),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
+  }
+
+  void _clearForm() {
+    firstnamecontroller.clear();
+    lastnamecontroller.clear();
+    collegenamecontroller.clear();
+    statecontroller.clear();
+    passwordcontroller.clear();
+    confirmpasswordcontroller.clear();
+    emailcontroller.clear();
+    numbercontroller.clear();
+    gendercontroller.clear();
+    setState(() {
+      _gender = null;
+    });
   }
 
   @override
@@ -199,9 +286,19 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your phone number';
                       }
+                      final regExp = RegExp(r'^[6789]\d{9}$');
+                      if (!regExp.hasMatch(value)) {
+                        return 'Please enter a valid 10-digit phone number starting with 9, 8, 7, or 6';
+                      }
                       // You can add more sophisticated phone number validation if needed
                       return null;
                     },
+                    keyboardType: TextInputType
+                        .phone, // Ensures numeric keyboard is shown
+                    inputFormatters: <TextInputFormatter>[
+                      FilteringTextInputFormatter
+                          .digitsOnly // Ensures only digits are input
+                    ],
                   ),
                   SizedBox(height: 10.0),
                   TextFormField(
@@ -287,10 +384,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       }
                       return null;
                     },
-                    dropdownColor: Color.fromARGB(
-                        255, 28, 23, 47), // Dropdown background color
-                    style:
-                        TextStyle(color: Colors.white), // White dropdown text
+                    dropdownColor: Colors.white, // Dropdown background color
+                    style: TextStyle(color: Colors.blue), // White dropdown text
                   ),
                   SizedBox(height: 20.0),
                   ElevatedButton(

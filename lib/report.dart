@@ -2,7 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:video_player/video_player.dart'; // Import the video_player package
+import 'package:video_player/video_player.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'home.dart';
 import 'navigation.dart';
 import 'profile.dart';
@@ -13,7 +16,6 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  // Define primary and contrast colors
   static final Color primaryColor = Color.fromARGB(255, 28, 23, 47);
   static final Color contrastColor = Colors.white;
 
@@ -36,10 +38,8 @@ class ProblemReportForm extends StatefulWidget {
 
 class _ProblemReportFormState extends State<ProblemReportForm> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _collegeController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
-  final TextEditingController _natureOfIncidentController =
-      TextEditingController();
   final TextEditingController _dateTimeController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
@@ -51,6 +51,14 @@ class _ProblemReportFormState extends State<ProblemReportForm> {
   File? _witnessImage;
   File? _witnessVideo;
   VideoPlayerController? _videoPlayerController;
+
+  String? _selectedNatureOfIncident;
+  final List<String> _natureOfIncidentOptions = [
+    'Bullying',
+    'Harassment',
+    'Ragging',
+    'College Pressure'
+  ];
 
   String? validateWitnessMedia() {
     if (_witnessImage == null && _witnessVideo == null) {
@@ -84,8 +92,7 @@ class _ProblemReportFormState extends State<ProblemReportForm> {
         await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (pickedFile != null) {
       File videoFile = File(pickedFile.path);
-      if (await videoFile.length() <= 100 * 1024 * 1024) {
-        // Check if file is less than 100MB
+      if (await videoFile.length() <= 20 * 1024 * 1024) {
         setState(() {
           _witnessVideo = videoFile;
           _videoPlayerController = VideoPlayerController.file(videoFile)
@@ -98,7 +105,7 @@ class _ProblemReportFormState extends State<ProblemReportForm> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'Video file is too large. Please select a video under 100MB.')),
+                  'Video file is too large. Please select a video under 20MB.')),
         );
       }
     }
@@ -109,8 +116,7 @@ class _ProblemReportFormState extends State<ProblemReportForm> {
         await ImagePicker().pickVideo(source: ImageSource.camera);
     if (pickedFile != null) {
       File videoFile = File(pickedFile.path);
-      if (await videoFile.length() <= 100 * 1024 * 1024) {
-        // Check if file is less than 100MB
+      if (await videoFile.length() <= 20 * 1024 * 1024) {
         setState(() {
           _witnessVideo = videoFile;
           _videoPlayerController = VideoPlayerController.file(videoFile)
@@ -123,7 +129,7 @@ class _ProblemReportFormState extends State<ProblemReportForm> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'Video file is too large. Please select a video under 100MB.')),
+                  'Video file is too large. Please select a video under 20MB.')),
         );
       }
     }
@@ -145,11 +151,87 @@ class _ProblemReportFormState extends State<ProblemReportForm> {
     }
   }
 
+  Future<void> _uploadData() async {
+    if (_formKey.currentState!.validate() && validateWitnessMedia() == null) {
+      try {
+        final User? user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('User not signed in')),
+          );
+          return;
+        }
+
+        final String uid = user.uid;
+        final String problemId =
+            FirebaseFirestore.instance.collection('problem_reports').doc().id;
+
+        String? witnessImageUrl;
+        if (_witnessImage != null) {
+          final ref =
+              FirebaseStorage.instance.ref().child('witness_images/$problemId');
+          await ref.putFile(_witnessImage!);
+          witnessImageUrl = await ref.getDownloadURL();
+        }
+
+        String? witnessVideoUrl;
+        if (_witnessVideo != null) {
+          final ref =
+              FirebaseStorage.instance.ref().child('witness_videos/$problemId');
+          await ref.putFile(_witnessVideo!);
+          witnessVideoUrl = await ref.getDownloadURL();
+        }
+
+        await FirebaseFirestore.instance
+            .collection('problem_reports')
+            .doc(problemId)
+            .set({
+          'user_id': uid,
+          'college': _collegeController.text,
+          'address': _addressController.text,
+          'nature_of_incident': _selectedNatureOfIncident,
+          'date_of_incident': _dateTimeController.text,
+          'location_of_incident': _locationController.text,
+          'description': _descriptionController.text,
+          'additional_comments': _additionalCommentsController.text,
+          'witness_image_url': witnessImageUrl,
+          'witness_video_url': witnessVideoUrl,
+          'timestamp': Timestamp.now(),
+          'problem_id': problemId,
+        });
+
+        _collegeController.clear();
+        _addressController.clear();
+        _dateTimeController.clear();
+        _locationController.clear();
+        _descriptionController.clear();
+        _additionalCommentsController.clear();
+        setState(() {
+          _witnessImage = null;
+          _witnessVideo = null;
+          _videoPlayerController = null;
+          _selectedNatureOfIncident = null;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Report submitted successfully')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit report: $e')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(validateWitnessMedia()!)),
+      );
+    }
+  }
+
   @override
   void dispose() {
-    _nameController.dispose();
+    _collegeController.dispose();
     _addressController.dispose();
-    _natureOfIncidentController.dispose();
     _dateTimeController.dispose();
     _locationController.dispose();
     _descriptionController.dispose();
@@ -160,6 +242,9 @@ class _ProblemReportFormState extends State<ProblemReportForm> {
 
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -203,410 +288,251 @@ class _ProblemReportFormState extends State<ProblemReportForm> {
         },
       ),
       body: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Card(
-            color: MyApp.primaryColor,
-            elevation: 5,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15.0),
-            ),
+        padding: EdgeInsets.symmetric(
+          horizontal: screenWidth * 0.05,
+          vertical: screenHeight * 0.02,
+        ),
+        child: Card(
+          color: Color.fromARGB(255, 28, 23, 47),
+          child: SingleChildScrollView(
             child: Padding(
               padding: EdgeInsets.all(16.0),
-              child: ListView(
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    style: TextStyle(color: MyApp.contrastColor),
-                    decoration: InputDecoration(
-                      labelText: 'Name *',
-                      labelStyle: TextStyle(color: MyApp.contrastColor),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your name';
-                      }
-                      return null;
-                    },
-                  ),
-                  SizedBox(height: 16.0),
-                  GestureDetector(
-                    onTap: () {
-                      _selectDateTime(context);
-                    },
-                    child: AbsorbPointer(
-                      child: TextFormField(
-                        controller: _dateTimeController,
-                        style: TextStyle(color: MyApp.contrastColor),
-                        decoration: InputDecoration(
-                          labelText: 'Date of Incident *',
-                          labelStyle: TextStyle(color: MyApp.contrastColor),
-                          suffixIcon: Icon(
-                            Icons.calendar_today,
-                            color: MyApp.contrastColor,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10.0),
-                            borderSide: BorderSide(color: MyApp.contrastColor),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10.0),
-                            borderSide: BorderSide(color: MyApp.contrastColor),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10.0),
-                            borderSide: BorderSide(color: MyApp.contrastColor),
-                          ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    SizedBox(height: 16.0),
+                    TextFormField(
+                      controller: _collegeController,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'College Name',
+                        labelStyle: TextStyle(color: Colors.white),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please select date of incident';
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 16.0),
-                  TextFormField(
-                    controller: _addressController,
-                    maxLines: 3,
-                    style: TextStyle(color: MyApp.contrastColor),
-                    decoration: InputDecoration(
-                      labelText: 'Address of Incident *',
-                      labelStyle: TextStyle(color: MyApp.contrastColor),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter address of incident';
-                      }
-                      return null;
-                    },
-                  ),
-                  SizedBox(height: 16.0),
-                  TextFormField(
-                    controller: _locationController,
-                    style: TextStyle(color: MyApp.contrastColor),
-                    decoration: InputDecoration(
-                      labelText: 'Specific Location of Incident *',
-                      labelStyle: TextStyle(color: MyApp.contrastColor),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter specific location of incident';
-                      }
-                      return null;
-                    },
-                  ),
-                  SizedBox(height: 16.0),
-                  TextFormField(
-                    controller: _natureOfIncidentController,
-                    maxLines: 3,
-                    style: TextStyle(color: MyApp.contrastColor),
-                    decoration: InputDecoration(
-                      labelText: 'Nature of Incident *',
-                      labelStyle: TextStyle(color: MyApp.contrastColor),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please describe the nature of incident';
-                      }
-                      return null;
-                    },
-                  ),
-                  SizedBox(height: 16.0),
-                  TextFormField(
-                    controller: _descriptionController,
-                    maxLines: 3,
-                    style: TextStyle(color: MyApp.contrastColor),
-                    decoration: InputDecoration(
-                      labelText: 'Description *',
-                      labelStyle: TextStyle(color: MyApp.contrastColor),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please describe the incident';
-                      }
-                      return null;
-                    },
-                  ),
-                  SizedBox(height: 16.0),
-                  TextFormField(
-                    controller: _additionalCommentsController,
-                    maxLines: 3,
-                    style: TextStyle(color: MyApp.contrastColor),
-                    decoration: InputDecoration(
-                      labelText: 'Additional Comments',
-                      labelStyle: TextStyle(color: MyApp.contrastColor),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10.0),
-                        borderSide: BorderSide(color: MyApp.contrastColor),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 16.0),
-                  Row(
-                    children: [
-                      Text(
-                        'Witness Image:',
-                        style: TextStyle(color: MyApp.contrastColor),
-                      ),
-                      SizedBox(width: 16.0),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _pickWitnessImage,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors
-                                .transparent, // Set the button background color to transparent
-                            shadowColor: Colors.transparent, // Disable shadow
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20.0),
-                              side: BorderSide(
-                                  color: MyApp.contrastColor), // Border color
-                            ),
-                          ),
-                          child: Text(
-                            'Select Image',
-                            style: TextStyle(
-                              color: MyApp.contrastColor,
-                              fontSize: 16.0, // Adjust text size as needed
-                            ),
-                          ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
                         ),
                       ),
-                      SizedBox(width: 16.0),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _takeWitnessPicture,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors
-                                .transparent, // Set the button background color to transparent
-                            shadowColor: Colors.transparent, // Disable shadow
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20.0),
-                              side: BorderSide(
-                                  color: MyApp.contrastColor), // Border color
-                            ),
-                          ),
-                          child: Text(
-                            'Take Picture',
-                            style: TextStyle(
-                              color: MyApp.contrastColor,
-                              fontSize: 16.0, // Adjust text size as needed
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16.0),
-                  if (_witnessImage != null)
-                    Column(
-                      children: [
-                        Image.file(
-                          _witnessImage!,
-                          height: 200,
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _witnessImage = null;
-                            });
-                          },
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.white,
-                          ),
-                          child: Text(
-                            'Remove Image',
-                            style: TextStyle(
-                                color: Color.fromARGB(255, 28, 23, 47)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  SizedBox(height: 16.0),
-                  Row(
-                    children: [
-                      Text(
-                        'Witness Video:',
-                        style: TextStyle(color: MyApp.contrastColor),
-                      ),
-                      SizedBox(width: 16.0),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _pickWitnessVideo,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors
-                                .transparent, // Set the button background color to transparent
-                            shadowColor: Colors.transparent, // Disable shadow
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20.0),
-                              side: BorderSide(
-                                  color: MyApp.contrastColor), // Border color
-                            ),
-                          ),
-                          child: Text(
-                            'Select Video',
-                            style: TextStyle(
-                              color: MyApp.contrastColor,
-                              fontSize: 16.0, // Adjust text size as needed
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 16.0),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _captureWitnessVideo,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors
-                                .transparent, // Set the button background color to transparent
-                            shadowColor: Colors.transparent, // Disable shadow
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20.0),
-                              side: BorderSide(
-                                  color: MyApp.contrastColor), // Border color
-                            ),
-                          ),
-                          child: Text(
-                            'Capture Video',
-                            style: TextStyle(
-                              color: MyApp.contrastColor,
-                              fontSize: 16.0, // Adjust text size as needed
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16.0),
-                  if (_witnessVideo != null)
-                    Column(
-                      children: [
-                        if (_videoPlayerController != null &&
-                            _videoPlayerController!.value.isInitialized)
-                          AspectRatio(
-                            aspectRatio:
-                                _videoPlayerController!.value.aspectRatio,
-                            child: VideoPlayer(_videoPlayerController!),
-                          ),
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _witnessVideo = null;
-                              _videoPlayerController?.dispose();
-                              _videoPlayerController = null;
-                            });
-                          },
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.white,
-                          ),
-                          child: Text(
-                            'Remove Video',
-                            style: TextStyle(
-                                color: Color.fromARGB(255, 28, 23, 47)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  SizedBox(height: 16.0),
-                  Padding(
-                    padding: EdgeInsets.all(12.0), // Adjust padding as needed
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          // Process form submission
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your college name';
                         }
+                        return null;
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: MyApp.contrastColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20.0),
+                    ),
+                    SizedBox(height: 16.0),
+                    TextFormField(
+                      controller: _addressController,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Address',
+                        labelStyle: TextStyle(color: Colors.white),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
                         ),
                       ),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                            vertical: 12.0), // Vertical padding
-                        child: Text(
-                          'Submit Report',
-                          style: TextStyle(
-                            color: MyApp.primaryColor,
-                            fontSize: 16.0, // Adjust font size as needed
-                          ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your address';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: 16.0),
+                    DropdownButtonFormField<String>(
+                      value: _selectedNatureOfIncident,
+                      decoration: InputDecoration(
+                        labelText: 'Nature of Incident',
+                        labelStyle: TextStyle(color: Colors.white),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
                         ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                      ),
+                      items: _natureOfIncidentOptions
+                          .map((incident) => DropdownMenuItem(
+                                value: incident,
+                                child: Text(
+                                  incident,
+                                  style: TextStyle(color: Colors.blue),
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedNatureOfIncident = value;
+                        });
+                      },
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please select the nature of the incident';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: 16.0),
+                    TextFormField(
+                      controller: _dateTimeController,
+                      readOnly: true,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Date of Incident',
+                        labelStyle: TextStyle(color: Colors.white),
+                        suffixIcon:
+                            Icon(Icons.calendar_today, color: Colors.white),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                      ),
+                      onTap: () => _selectDateTime(context),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please select the date of the incident';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: 16.0),
+                    TextFormField(
+                      controller: _locationController,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Location of Incident',
+                        labelStyle: TextStyle(color: Colors.white),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter the location of the incident';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: 16.0),
+                    TextFormField(
+                      controller: _descriptionController,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Description',
+                        labelStyle: TextStyle(color: Colors.white),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter a description of the incident';
+                        }
+                        return null;
+                      },
+                      maxLines: 3,
+                    ),
+                    SizedBox(height: 16.0),
+                    TextFormField(
+                      controller: _additionalCommentsController,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Additional Comments',
+                        labelStyle: TextStyle(color: Colors.white),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white),
+                        ),
+                      ),
+                      maxLines: 3,
+                    ),
+                    SizedBox(height: 16.0),
+                    Text(
+                      'Upload Witness Image:',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    SizedBox(height: 8.0),
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: _pickWitnessImage,
+                          child: Text('Select Image'),
+                        ),
+                        SizedBox(width: 8.0),
+                        ElevatedButton(
+                          onPressed: _takeWitnessPicture,
+                          child: Text('Capture Image'),
+                        ),
+                      ],
+                    ),
+                    if (_witnessImage != null)
+                      Column(
+                        children: [
+                          SizedBox(height: 8.0),
+                          Image.file(
+                            _witnessImage!,
+                            height: 200,
+                          ),
+                        ],
+                      ),
+                    SizedBox(height: 16.0),
+                    Text(
+                      'Upload Witness Video:',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    SizedBox(height: 8.0),
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: _pickWitnessVideo,
+                          child: Text('Select Video'),
+                        ),
+                        SizedBox(width: 8.0),
+                        ElevatedButton(
+                          onPressed: _captureWitnessVideo,
+                          child: Text('Capture Video'),
+                        ),
+                      ],
+                    ),
+                    if (_witnessVideo != null)
+                      Column(
+                        children: [
+                          SizedBox(height: 8.0),
+                          _videoPlayerController != null &&
+                                  _videoPlayerController!.value.isInitialized
+                              ? AspectRatio(
+                                  aspectRatio:
+                                      _videoPlayerController!.value.aspectRatio,
+                                  child: VideoPlayer(_videoPlayerController!),
+                                )
+                              : Container(),
+                        ],
+                      ),
+                    SizedBox(height: 24.0),
+                    Center(
+                      child: ElevatedButton(
+                        onPressed: _uploadData,
+                        child: Text('Submit Report'),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
